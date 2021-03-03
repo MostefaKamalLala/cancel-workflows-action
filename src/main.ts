@@ -35,7 +35,7 @@ async function main() {
   }
 
   console.log({eventName, sha, headSha, branch, owner, repo, GITHUB_RUN_ID})
-  const token = core.getInput('workflow_run_id', {required: true})
+  const token = core.getInput('github_token', {required: true})
   const workflow_id = core.getInput('workflow_id', {required: false})
   const ignore_sha = core.getInput('ignore_sha', {required: false}) === 'true'
   console.log(`Found token: ${token ? 'yes' : 'no'}`)
