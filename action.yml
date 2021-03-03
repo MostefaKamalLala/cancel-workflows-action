@@ -5,7 +5,7 @@ inputs:
   github_token:  # github token
     description: 'Token to authentify to github'
     required: true
-  worflow_run_id:  # id of input
+  workflow_run_id:  # id of input
     description: 'The current id of workflow run'
     required: true
 runs:
