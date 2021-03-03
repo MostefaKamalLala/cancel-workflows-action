@@ -1,4 +1,5 @@
-import * as core from '@actions/core'
+const core = require('@actions/core');
+const github = require('@actions/github');
 
 async function run(): Promise<void> {
   try {
@@ -8,6 +9,17 @@ async function run(): Promise<void> {
     core.debug(`workflow_run_id: ${workflow_run_id} `) // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
 
     core.setOutput('time', new Date().toTimeString())
+    const context = github.context
+
+
+    const octokit = github.getOctokit(github_token)
+    var runs = await octokit.actions.listWorkflowRunsForRepo({
+      owner: context.repo.owner,
+      repo: context.repo.repo
+    });
+
+    core.debug(runs)
+
   } catch (error) {
     core.setFailed(error.message)
   }
