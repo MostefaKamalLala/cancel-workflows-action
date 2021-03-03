@@ -1,28 +1,112 @@
-const core = require('@actions/core');
-const github = require('@actions/github');
+/* eslint-disable prettier/prettier */
+import * as core from '@actions/core'
+import * as github from '@actions/github'
 
-async function run(): Promise<void> {
-  try {
-    const github_token: string = core.getInput('github_token')
-    const workflow_run_id: string = core.getInput('workflow_run_id')
-    core.debug(`github_token: ${github_token} `) // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-    core.debug(`workflow_run_id: ${workflow_run_id} `) // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-
-    core.setOutput('time', new Date().toTimeString())
-    const context = github.context
-
-
-    const octokit = github.getOctokit(github_token)
-    var runs = await octokit.actions.listWorkflowRunsForRepo({
-      owner: context.repo.owner,
-      repo: context.repo.repo
-    });
-
-    console.log(runs)
-
-  } catch (error) {
-    core.setFailed(error.message)
-  }
+if (!github) {
+  throw new Error('Module not found: github')
 }
 
-run()
+if (!core) {
+  throw new Error('Module not found: core')
+}
+
+async function main() {
+  const {
+    eventName,
+    sha,
+    ref,
+    repo: {owner, repo},
+    payload
+  } = github.context
+  const {GITHUB_RUN_ID} = process.env
+  console.log(`GITHUB_RUN_ID ${GITHUB_RUN_ID}`)
+  let branch = ref.slice(11)
+  console.log(`GITHUB_RUN_ID ${branch}`)
+  let headSha = sha
+  console.log(`headSha ${headSha}`)
+  console.log(`payload.pull_request ${payload.pull_request}`)
+  console.log(`payload.workflow_run ${payload.workflow_run}`)
+  if (payload.pull_request) {
+    branch = payload.pull_request.head.ref
+    headSha = payload.pull_request.head.sha
+  } else if (payload.workflow_run) {
+    branch = payload.workflow_run.head_branch
+    headSha = payload.workflow_run.head_sha
+  }
+
+  console.log({eventName, sha, headSha, branch, owner, repo, GITHUB_RUN_ID})
+  const token = core.getInput('access_token', {required: true})
+  const workflow_id = core.getInput('workflow_id', {required: false})
+  const ignore_sha = core.getInput('ignore_sha', {required: false}) === 'true'
+  console.log(`Found token: ${token ? 'yes' : 'no'}`)
+  const workflow_ids: string[] = []
+  const octokit = github.getOctokit(token)
+
+  const {data: current_run} = await octokit.actions.getWorkflowRun({
+    owner,
+    repo,
+    run_id: Number(GITHUB_RUN_ID)
+  })
+  console.log(`current_run: ${current_run}`)
+  console.log(`workflow_id input: ${workflow_id}`)
+
+  if (workflow_id) {
+    // The user provided one or more workflow id
+    workflow_id
+      .replace(/\s/g, '')
+      .split(',')
+      .forEach(n => workflow_ids.push(n))
+  } else {
+    // The user did not provide workflow id so derive from current run
+    workflow_ids.push(String(current_run.workflow_id))
+  }
+
+  console.log(`Found workflow_id: ${JSON.stringify(workflow_ids)}`)
+
+  await Promise.all(
+    workflow_ids.map(async workflow_id => {
+      try {
+        const {data} = await octokit.actions.listWorkflowRuns({
+          owner,
+          repo,
+          workflow_id,
+          branch
+        })
+        console.log(`listWorkflowRuns: ${data}`)
+        const branchWorkflows = data.workflow_runs.filter(
+          run => run.head_branch === branch
+        )
+        console.log(
+          `Found ${branchWorkflows.length} runs for workflow ${workflow_id} on branch ${branch}`
+        )
+        console.log(branchWorkflows.map(run => `- ${run.html_url}`).join('\n'))
+
+        const runningWorkflows = branchWorkflows.filter(
+          run =>
+            (ignore_sha || run.head_sha !== headSha) &&
+            run.status !== 'completed' &&
+            new Date(run.created_at) < new Date(current_run.created_at)
+        )
+        console.log(`with ${runningWorkflows.length} runs to cancel.`)
+
+        for (const {id, head_sha, status, html_url} of runningWorkflows) {
+          console.log('Canceling run: ', {id, head_sha, status, html_url})
+          const res = await octokit.actions.cancelWorkflowRun({
+            owner,
+            repo,
+            run_id: id
+          })
+          console.log(`Cancel run ${id} responded with status ${res}`)
+        }
+      } catch (e) {
+        const msg = e.message || e
+        console.log(`Error while canceling workflow_id ${workflow_id}: ${msg}`)
+      }
+      console.log('')
+    })
+  )
+}
+
+main()
+  .then(() => core.info('Cancel Complete.'))
+  .catch(e => core.setFailed(e.message))

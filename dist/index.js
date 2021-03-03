@@ -3,10 +3,29 @@ require('./sourcemap-register.js');module.exports =
 /******/ 	var __webpack_modules__ = ({
 
 /***/ 109:
-/***/ (function(__unused_webpack_module, __unused_webpack_exports, __webpack_require__) {
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -16,30 +35,98 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-const core = __webpack_require__(186);
-const github = __webpack_require__(438);
-function run() {
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+/* eslint-disable prettier/prettier */
+const core = __importStar(__webpack_require__(186));
+const github = __importStar(__webpack_require__(438));
+if (!github) {
+    throw new Error('Module not found: github');
+}
+if (!core) {
+    throw new Error('Module not found: core');
+}
+function main() {
     return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const github_token = core.getInput('github_token');
-            const workflow_run_id = core.getInput('workflow_run_id');
-            core.debug(`github_token: ${github_token} `); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-            core.debug(`workflow_run_id: ${workflow_run_id} `); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-            core.setOutput('time', new Date().toTimeString());
-            const context = github.context;
-            const octokit = github.getOctokit(github_token);
-            var runs = yield octokit.actions.listWorkflowRunsForRepo({
-                owner: context.repo.owner,
-                repo: context.repo.repo
-            });
-            console.log(runs);
+        const { eventName, sha, ref, repo: { owner, repo }, payload } = github.context;
+        const { GITHUB_RUN_ID } = process.env;
+        console.log(`GITHUB_RUN_ID ${GITHUB_RUN_ID}`);
+        let branch = ref.slice(11);
+        console.log(`GITHUB_RUN_ID ${branch}`);
+        let headSha = sha;
+        console.log(`headSha ${headSha}`);
+        console.log(`payload.pull_request ${payload.pull_request}`);
+        console.log(`payload.workflow_run ${payload.workflow_run}`);
+        if (payload.pull_request) {
+            branch = payload.pull_request.head.ref;
+            headSha = payload.pull_request.head.sha;
         }
-        catch (error) {
-            core.setFailed(error.message);
+        else if (payload.workflow_run) {
+            branch = payload.workflow_run.head_branch;
+            headSha = payload.workflow_run.head_sha;
         }
+        console.log({ eventName, sha, headSha, branch, owner, repo, GITHUB_RUN_ID });
+        const token = core.getInput('access_token', { required: true });
+        const workflow_id = core.getInput('workflow_id', { required: false });
+        const ignore_sha = core.getInput('ignore_sha', { required: false }) === 'true';
+        console.log(`Found token: ${token ? 'yes' : 'no'}`);
+        const workflow_ids = [];
+        const octokit = github.getOctokit(token);
+        const { data: current_run } = yield octokit.actions.getWorkflowRun({
+            owner,
+            repo,
+            run_id: Number(GITHUB_RUN_ID)
+        });
+        console.log(`current_run: ${current_run}`);
+        console.log(`workflow_id input: ${workflow_id}`);
+        if (workflow_id) {
+            // The user provided one or more workflow id
+            workflow_id
+                .replace(/\s/g, '')
+                .split(',')
+                .forEach(n => workflow_ids.push(n));
+        }
+        else {
+            // The user did not provide workflow id so derive from current run
+            workflow_ids.push(String(current_run.workflow_id));
+        }
+        console.log(`Found workflow_id: ${JSON.stringify(workflow_ids)}`);
+        yield Promise.all(workflow_ids.map((workflow_id) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { data } = yield octokit.actions.listWorkflowRuns({
+                    owner,
+                    repo,
+                    workflow_id,
+                    branch
+                });
+                console.log(`listWorkflowRuns: ${data}`);
+                const branchWorkflows = data.workflow_runs.filter(run => run.head_branch === branch);
+                console.log(`Found ${branchWorkflows.length} runs for workflow ${workflow_id} on branch ${branch}`);
+                console.log(branchWorkflows.map(run => `- ${run.html_url}`).join('\n'));
+                const runningWorkflows = branchWorkflows.filter(run => (ignore_sha || run.head_sha !== headSha) &&
+                    run.status !== 'completed' &&
+                    new Date(run.created_at) < new Date(current_run.created_at));
+                console.log(`with ${runningWorkflows.length} runs to cancel.`);
+                for (const { id, head_sha, status, html_url } of runningWorkflows) {
+                    console.log('Canceling run: ', { id, head_sha, status, html_url });
+                    const res = yield octokit.actions.cancelWorkflowRun({
+                        owner,
+                        repo,
+                        run_id: id
+                    });
+                    console.log(`Cancel run ${id} responded with status ${res.status}`);
+                }
+            }
+            catch (e) {
+                const msg = e.message || e;
+                console.log(`Error while canceling workflow_id ${workflow_id}: ${msg}`);
+            }
+            console.log('');
+        })));
     });
 }
-run();
+main()
+    .then(() => core.info('Cancel Complete.'))
+    .catch(e => core.setFailed(e.message));
 
 
 /***/ }),
