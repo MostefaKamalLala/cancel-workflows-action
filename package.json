@@ -1,8 +1,8 @@
 {
-  "name": "typescript-action",
+  "name": "cancel-workflows-action",
   "version": "0.0.0",
   "private": true,
-  "description": "TypeScript template action",
+  "description": "Action to cancel workflows",
   "main": "lib/main.js",
   "scripts": {
     "build": "tsc",
