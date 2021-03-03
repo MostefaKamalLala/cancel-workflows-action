@@ -18,7 +18,7 @@ async function run(): Promise<void> {
       repo: context.repo.repo
     });
 
-    core.debug(runs)
+    console.log(runs)
 
   } catch (error) {
     core.setFailed(error.message)
