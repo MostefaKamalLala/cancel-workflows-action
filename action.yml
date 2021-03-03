@@ -5,8 +5,8 @@ inputs:
   github_token:  # github token
     description: 'Token to authentify to github'
     required: true
-  workflow_run_id:  # id of input
-    description: 'The current id of workflow run'
+  workflow_id:  # id of input
+    description: 'The id of workflow or filename'
     required: true
 runs:
   using: 'node12'
