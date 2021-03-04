@@ -72,7 +72,7 @@ async function main() {
           workflow_id,
           branch
         })
-        console.log(`listWorkflowRuns: ${data}`)
+        core.debug(`listWorkflowRuns: ${JSON.stringify(data)}`)
 
         const branchWorkflows = data.workflow_runs.filter(function(run) {
           if(!!current_run.pull_requests && !!current_run.pull_requests.length){
@@ -84,11 +84,9 @@ async function main() {
           }
           return false
         })
-        
-        console.log(
-          `Found ${branchWorkflows.length} runs for workflow ${workflow_id} on branch ${branch}`
-        )
-        console.log(branchWorkflows.map(run => `- ${run.html_url}`).join('\n'))
+
+        core.debug(`Found ${branchWorkflows.length} runs for workflow ${workflow_id} on branch ${branch}`)
+        core.debug(branchWorkflows.map(run => `- ${run.html_url}`).join('\n'))
 
         const runningWorkflows = branchWorkflows.filter(
           run =>
@@ -96,7 +94,8 @@ async function main() {
             run.status !== 'completed' &&
             new Date(run.created_at) < new Date(current_run.created_at)
         )
-        console.log(`with ${runningWorkflows.length} runs to cancel.`)
+
+        console.log(`%cwith ${runningWorkflows.length} runs to cancel.`, 'color: green;')
 
         for (const {id, head_sha, status, html_url} of runningWorkflows) {
           console.log('Canceling run: ', {id, head_sha, status, html_url})
@@ -105,13 +104,14 @@ async function main() {
             repo,
             run_id: id
           })
-          console.log(`Cancel run ${id} responded with status ${res}`)
+
+          core.debug(`Cancel run ${id} responded with status ${JSON.stringify(res)}`)
         }
       } catch (e) {
         const msg = e.message || e
-        console.log(`Error while canceling workflow_id ${workflow_id}: ${msg}`)
+        core.error(`Error while canceling workflow_id ${workflow_id}: ${msg}`)
       }
-      console.log('')
+      core.debug('')
     })
   )
 }
