@@ -49,11 +49,11 @@ function main() {
     return __awaiter(this, void 0, void 0, function* () {
         const { eventName, sha, ref, repo: { owner, repo }, payload } = github.context;
         const { GITHUB_RUN_ID } = process.env;
-        console.log(`GITHUB_RUN_ID ${GITHUB_RUN_ID}`);
+        core.debug(`GITHUB_RUN_ID ${GITHUB_RUN_ID}`);
         let branch = ref.slice(11);
-        console.log(`GITHUB_RUN_ID ${branch}`);
+        core.debug(`GITHUB_RUN_ID ${branch}`);
         let headSha = sha;
-        console.log(`headSha ${headSha}`);
+        core.debug(`headSha ${headSha}`);
         console.log(`payload.pull_request ${payload.pull_request}`);
         console.log(`payload.workflow_run ${payload.workflow_run}`);
         if (payload.pull_request) {
@@ -99,7 +99,15 @@ function main() {
                     branch
                 });
                 console.log(`listWorkflowRuns: ${data}`);
-                const branchWorkflows = data.workflow_runs.filter(run => run.head_branch === branch);
+                const branchWorkflows = data.workflow_runs.filter(function (run) {
+                    if (current_run.pull_requests !== null) {
+                        if (run.id !== current_run.id && run.pull_requests[0].id === current_run.pull_requests[0].id && run.status !== "completed") {
+                            return true;
+                        }
+                        return false;
+                    }
+                    return false;
+                });
                 console.log(`Found ${branchWorkflows.length} runs for workflow ${workflow_id} on branch ${branch}`);
                 console.log(branchWorkflows.map(run => `- ${run.html_url}`).join('\n'));
                 const runningWorkflows = branchWorkflows.filter(run => (ignore_sha || run.head_sha !== headSha) &&

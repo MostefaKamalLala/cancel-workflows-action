@@ -19,11 +19,11 @@ async function main() {
     payload
   } = github.context
   const {GITHUB_RUN_ID} = process.env
-  console.log(`GITHUB_RUN_ID ${GITHUB_RUN_ID}`)
+  core.debug(`GITHUB_RUN_ID ${GITHUB_RUN_ID}`)
   let branch = ref.slice(11)
-  console.log(`GITHUB_RUN_ID ${branch}`)
+  core.debug(`GITHUB_RUN_ID ${branch}`)
   let headSha = sha
-  console.log(`headSha ${headSha}`)
+  core.debug(`headSha ${headSha}`)
   console.log(`payload.pull_request ${payload.pull_request}`)
   console.log(`payload.workflow_run ${payload.workflow_run}`)
   if (payload.pull_request) {
@@ -73,9 +73,18 @@ async function main() {
           branch
         })
         console.log(`listWorkflowRuns: ${data}`)
-        const branchWorkflows = data.workflow_runs.filter(
-          run => run.head_branch === branch
-        )
+
+        const branchWorkflows = data.workflow_runs.filter(function(run) {
+          if(current_run.pull_requests !== null){
+            if(run.id !== current_run.id &&  run.pull_requests[0].id === current_run.pull_requests[0].id && run.status !== "completed"){
+              return true
+            }
+
+            return false
+          }
+          return false
+        })
+        
         console.log(
           `Found ${branchWorkflows.length} runs for workflow ${workflow_id} on branch ${branch}`
         )
